@@ -49,6 +49,20 @@ def slugify(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
 
 
+def iter_kb_documents(kb_dir: Path) -> list[Path]:
+    """Return the canonical set of policy documents that make up the corpus.
+
+    README files document the knowledge base for humans but are deliberately not
+    indexed. Keeping this rule in one helper prevents the index builder, corpus
+    hash, and runtime loader from drifting apart.
+    """
+    return [
+        path
+        for path in sorted(Path(kb_dir).glob("*.md"))
+        if path.name.lower() != "readme.md"
+    ]
+
+
 def parse_front_matter(raw: str) -> tuple[dict[str, str], str]:
     if not raw.startswith("---"):
         return {}, raw
@@ -118,9 +132,7 @@ def chunk_document(path: Path) -> list[Chunk]:
 
 def load_corpus(kb_dir: Path) -> list[Chunk]:
     chunks: list[Chunk] = []
-    for path in sorted(Path(kb_dir).glob("*.md")):
-        if path.name.lower() == "readme.md":
-            continue
+    for path in iter_kb_documents(kb_dir):
         chunks.extend(chunk_document(path))
     if not chunks:
         raise ValueError(f"no knowledge-base documents found in {kb_dir}")
