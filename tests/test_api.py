@@ -74,6 +74,26 @@ def test_feedback_round_trip(client):
     assert client.get("/stats").json()["feedback_count"] == 1
 
 
+def test_feedback_rate_limit_is_per_session_not_shared_api_key(client, monkeypatch):
+    from app.main import limiter
+
+    monkeypatch.setattr(limiter, "per_minute", 1)
+    limiter._hits.clear()
+    payload = {"request_id": "feedback01", "helpful": True}
+    try:
+        assert client.post(
+            "/feedback", json=payload, headers={"x-client-id": "browser-a"}
+        ).status_code == 200
+        assert client.post(
+            "/feedback", json=payload, headers={"x-client-id": "browser-a"}
+        ).status_code == 429
+        assert client.post(
+            "/feedback", json=payload, headers={"x-client-id": "browser-b"}
+        ).status_code == 200
+    finally:
+        limiter._hits.clear()
+
+
 def test_metrics_are_exposed_in_prometheus_format(client):
     client.post("/chat", json={"question": "lost my card"})
     body = client.get("/metrics").text
