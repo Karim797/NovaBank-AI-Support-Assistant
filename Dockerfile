@@ -19,7 +19,8 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --upgrade pip "setuptools>=78.1.1" "msgpack>=1.2.1" && \
+    pip install -r requirements.txt
 
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim AS runtime
@@ -31,7 +32,10 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/src \
     PATH="/opt/venv/bin:$PATH"
 
-RUN useradd --create-home --uid 10001 appuser
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    rm -rf /var/lib/apt/lists/* && \
+    useradd --create-home --uid 10001 appuser
 WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
