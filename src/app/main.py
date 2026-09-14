@@ -286,7 +286,7 @@ def chat_batch(payload: BatchChatRequest, request: Request) -> list[ChatResponse
             prompt_version=result.prompt_version,
             latency_ms=latency_ms,
         )
-        _record(request, payload.question, response, result)
+        _record(request, item.question, response, result)
         out.append(response)
     return out
 
