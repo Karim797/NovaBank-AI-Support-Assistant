@@ -17,6 +17,7 @@ Deployment:
 from __future__ import annotations
 
 import os
+import uuid
 
 import httpx
 import streamlit as st
@@ -37,18 +38,29 @@ def _setting(name: str, default: str = "") -> str:
 
 API_URL = _setting("API_URL", DEFAULT_API_URL).rstrip("/")
 API_KEY = _setting("API_KEY", "")
-HEADERS = {"x-api-key": API_KEY} if API_KEY else {}
+
+st.set_page_config(page_title="NovaBank Support Assistant", page_icon="🏦", layout="centered")
+
+if "client_id" not in st.session_state:
+    # Streamlit calls the API server-side, so Railway only sees Streamlit's
+    # egress address. A session-scoped opaque id lets the API apply a fair demo
+    # rate limit per browser session without collecting the visitor's IP.
+    st.session_state["client_id"] = uuid.uuid4().hex
+
+HEADERS = {"x-client-id": st.session_state["client_id"]}
+if API_KEY:
+    HEADERS["x-api-key"] = API_KEY
 
 ROUTE_HELP = {
     "deterministic_policy": "Fixed, compliance-approved answer. No LLM involved.",
-    "rag_topic_filtered": "Confident intent - retrieval was restricted to that intent's topics.",
-    "rag_unfiltered": "Low-confidence intent - searched the whole knowledge base.",
+    "rag_topic_prior": "Confident intent - searched the full knowledge base with a small intent-topic ranking prior.",
+    "rag_topic_filtered": "Legacy route label from the earlier hard-filter implementation.",
+    "rag_unfiltered": "Low-confidence intent - searched the whole knowledge base without an intent prior.",
     "no_relevant_context": "Nothing in the knowledge base cleared the relevance floor.",
     "ungrounded_answer": "The model's answer cited nothing valid, so it was discarded.",
     "llm_unavailable": "The generation provider failed. Degraded response.",
 }
 
-st.set_page_config(page_title="NovaBank Support Assistant", page_icon="🏦", layout="centered")
 st.title("NovaBank Support Assistant")
 st.caption("NovaBank is a fictional bank. Policies are synthetic and exist to demonstrate RAG.")
 
