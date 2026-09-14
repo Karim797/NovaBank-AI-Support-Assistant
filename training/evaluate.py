@@ -16,6 +16,10 @@ Macro F1 weights every intent equally.
 The de-duplicated number matters: the official split contains a handful of test
 rows that appear verbatim in train. We report macro F1 with and without them so
 the headline number cannot be quietly inflated by memorisation.
+
+Probability quality matters as well because confidence is a routing input. The
+report therefore includes a 10-bin expected calibration error (ECE), the bin
+statistics themselves, and a stratified bootstrap 95% interval for macro F1.
 """
 
 from __future__ import annotations
@@ -45,6 +49,52 @@ ARTIFACT = MODELS / "intent_clf_v1.joblib"
 MIN_MACRO_F1 = 0.85
 
 
+def _calibration(conf: np.ndarray, correct: np.ndarray, n_bins: int = 10) -> tuple[float, list[dict]]:
+    """Equal-width reliability bins and expected calibration error."""
+    edges = np.linspace(0.0, 1.0, n_bins + 1)
+    ece = 0.0
+    bins: list[dict] = []
+    n = len(conf)
+    for i in range(n_bins):
+        lo, hi = float(edges[i]), float(edges[i + 1])
+        mask = (conf >= lo) & (conf < hi if i < n_bins - 1 else conf <= hi)
+        count = int(mask.sum())
+        if count:
+            avg_conf = float(conf[mask].mean())
+            accuracy = float(correct[mask].mean())
+            gap = accuracy - avg_conf
+            ece += (count / n) * abs(gap)
+        else:
+            avg_conf = accuracy = gap = None
+        bins.append(
+            {
+                "lower": round(lo, 2),
+                "upper": round(hi, 2),
+                "count": count,
+                "mean_confidence": round(avg_conf, 4) if avg_conf is not None else None,
+                "accuracy": round(accuracy, 4) if accuracy is not None else None,
+                "accuracy_minus_confidence": round(gap, 4) if gap is not None else None,
+            }
+        )
+    return float(ece), bins
+
+
+def _bootstrap_macro_f1(
+    y: np.ndarray, pred: np.ndarray, n_boot: int = 500, seed: int = 17
+) -> tuple[float, float]:
+    """Stratified bootstrap so every resample preserves all 77 intents."""
+    rng = np.random.default_rng(seed)
+    groups = [np.flatnonzero(y == label) for label in np.unique(y)]
+    scores = np.empty(n_boot, dtype=float)
+    for i in range(n_boot):
+        sample = np.concatenate(
+            [rng.choice(group, size=len(group), replace=True) for group in groups]
+        )
+        scores[i] = f1_score(y[sample], pred[sample], average="macro")
+    low, high = np.quantile(scores, [0.025, 0.975])
+    return float(low), float(high)
+
+
 def main() -> int:
     if not ARTIFACT.exists():
         print("no artifact - run `python -m training.train_intent`", file=sys.stderr)
@@ -67,6 +117,8 @@ def main() -> int:
     macro_f1 = float(f1_score(y, pred, average="macro"))
     mask_new = ~test.text.str.strip().str.lower().isin(seen).to_numpy()
     macro_f1_dedup = float(f1_score(y[mask_new], pred[mask_new], average="macro"))
+    macro_f1_ci_low, macro_f1_ci_high = _bootstrap_macro_f1(y, pred)
+    ece, calibration_bins = _calibration(conf, correct)
 
     threshold = float(bundle["confidence_threshold"])
     keep = conf >= threshold
@@ -93,6 +145,10 @@ def main() -> int:
         "model_version": bundle["model_version"],
         "n_test": int(len(test)),
         "test_macro_f1": round(macro_f1, 4),
+        "test_macro_f1_bootstrap_95ci": [
+            round(macro_f1_ci_low, 4),
+            round(macro_f1_ci_high, 4),
+        ],
         "test_macro_f1_dedup": round(macro_f1_dedup, 4),
         "n_test_dedup": int(mask_new.sum()),
         "test_weighted_f1": round(float(f1_score(y, pred, average="weighted")), 4),
@@ -104,6 +160,8 @@ def main() -> int:
         if (~keep).any()
         else None,
         "mean_confidence": round(float(conf.mean()), 4),
+        "ece_10_bins": round(ece, 4),
+        "calibration_bins": calibration_bins,
         "worst_10_intents": per_class[:10],
         "top_confusions": [
             {"true": t, "predicted": p, "count": n} for (t, p), n in pairs.most_common(10)
@@ -123,15 +181,23 @@ def main() -> int:
     bundle["metadata"].update(
         {
             "test_macro_f1": report["test_macro_f1"],
+            "test_macro_f1_bootstrap_95ci": report["test_macro_f1_bootstrap_95ci"],
             "test_macro_f1_dedup": report["test_macro_f1_dedup"],
             "test_accuracy": report["test_accuracy"],
             "coverage_at_threshold": report["coverage_at_threshold"],
+            "ece_10_bins": report["ece_10_bins"],
             "evaluated_on_n": report["n_test"],
         }
     )
     joblib.dump(bundle, ARTIFACT)
 
-    print(json.dumps({k: v for k, v in report.items() if not isinstance(v, list)}, indent=2))
+    printable = {
+        k: v
+        for k, v in report.items()
+        if k not in {"worst_10_intents", "top_confusions", "calibration_bins"}
+    }
+    print(json.dumps(printable, indent=2))
+    print("\ncalibration:", json.dumps(report["calibration_bins"], indent=2))
     print("\nworst intents:", json.dumps(report["worst_10_intents"][:5], indent=2))
     print("\ntop confusions:", json.dumps(report["top_confusions"][:5], indent=2))
     if not report["quality_gate"]["passed"]:
