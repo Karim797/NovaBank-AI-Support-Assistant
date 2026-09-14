@@ -1,0 +1,50 @@
+# Local end-to-end stack: API + demo UI + MLflow tracking server.
+# The API image contains no MLflow and no Streamlit - training and demo tooling
+# are not shipped to production.
+services:
+  api:
+    build: .
+    image: novabank-assistant:local
+    ports: ["8000:8000"]
+    environment:
+      APP_ENV: docker
+      LOG_LEVEL: INFO
+      LLM_PROVIDER: ${LLM_PROVIDER:-extractive}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD:-0.45}
+      FEEDBACK_DB_URL: sqlite:///data/feedback.db
+    volumes:
+      # SQLite lives on a volume: without this the feedback table dies with the
+      # container. This is also the clearest signal that SQLite is an MVP choice.
+      - feedback-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=2)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+
+  ui:
+    build: .
+    image: novabank-assistant:local
+    command: >
+      sh -c "pip install --no-cache-dir streamlit==1.41.1 &&
+             streamlit run /app/ui/streamlit_app.py --server.port 8501 --server.address 0.0.0.0"
+    ports: ["8501:8501"]
+    environment:
+      API_URL: http://api:8000
+    volumes:
+      - ./ui:/app/ui:ro
+    depends_on:
+      api:
+        condition: service_healthy
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.19.0
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri /mlruns
+    ports: ["5000:5000"]
+    volumes:
+      - ./mlruns:/mlruns
+
+volumes:
+  feedback-data:

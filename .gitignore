@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+mlruns/
+mlartifacts/
+data/raw/*.csv
+models/*
+!models/.gitkeep
+feedback.db
+*.log

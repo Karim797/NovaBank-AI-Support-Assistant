@@ -1,0 +1,11 @@
+# --- runtime (serving) ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+scikit-learn==1.8.0
+scipy==1.18.1
+numpy==2.4.4
+joblib==1.5.3
+httpx[socks]==0.28.1
+python-json-logger==3.2.1
