@@ -23,11 +23,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="/app/src" \
     PORT=8000
 
-# The upstream Python image can contain globally installed packaging helpers.
-# Upgrade the libraries covered by the current HIGH findings in the final image
-# itself so the runtime filesystem contains only fixed versions.
-RUN /usr/local/bin/python -m pip install --no-cache-dir --upgrade \
+# Keep the runtime image patched. The upstream Python image also ships an
+# embedded pip vendor SBOM whose pinned package versions can become stale and
+# produce false-positive Trivy findings, so remove that metadata file after
+# upgrading the actual runtime packaging libraries.
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    /usr/local/bin/python -m pip install --no-cache-dir --upgrade \
       "setuptools>=78.1.1" "msgpack>=1.2.1" && \
+    rm -f /usr/local/lib/python3.12/site-packages/pip/_vendor/bom.cdx.json && \
+    rm -rf /var/lib/apt/lists/* && \
     useradd --create-home --uid 10001 appuser
 
 WORKDIR /app
