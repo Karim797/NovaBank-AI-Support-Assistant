@@ -15,8 +15,8 @@ you can plot (`training/evaluate.py`), and a reason code you can log.
 The decision table
 ------------------
 confident intent + deterministic policy  -> fixed compliance text, no LLM
-confident intent + rag                   -> retrieval filtered to the intent's topics
-low confidence                           -> retrieval over the whole KB (no filter)
+confident intent + rag                   -> whole-KB retrieval with a soft topic prior
+low confidence                           -> retrieval over the whole KB (no prior)
 best retrieval score < floor             -> refuse, escalate
 LLM invalid/uncited after one repair     -> refuse, escalate
 LLM provider down                        -> refuse, escalate
@@ -158,21 +158,9 @@ class SupportRouter:
             topics=topics or None,
             min_score=self.settings.retrieval_min_score,
         )
-        used_filter = bool(topics)
-        if not hits and topics:
-            # The topic filter can be wrong when the classifier is confidently
-            # wrong. Widen once rather than refusing on a filter artefact.
-            hits = self.index.search(
-                question,
-                top_k=self.settings.retrieval_top_k,
-                topics=None,
-                min_score=self.settings.retrieval_min_score,
-            )
-            used_filter = False
-            logger.info("retrieval_filter_widened", extra={"intent": intent.intent})
         timings["retrieve_ms"] = int((time.perf_counter() - t0) * 1000)
 
-        route = RouteDecision.RAG_TOPIC_FILTERED if used_filter else RouteDecision.RAG_UNFILTERED
+        route = RouteDecision.RAG_TOPIC_PRIOR if topics else RouteDecision.RAG_UNFILTERED
         top_score = hits[0].score if hits else 0.0
 
         if not hits:
