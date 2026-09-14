@@ -13,7 +13,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements.txt .
 RUN pip install --upgrade pip "setuptools>=78.1.1" && \
     pip install -r requirements.txt && \
-    pip install --upgrade "msgpack>=1.2.1"
+    pip install --upgrade "msgpack>=1.2.1" && \
+    rm -f /opt/venv/lib/python3.12/site-packages/pip/_vendor/bom.cdx.json
 
 FROM python:3.12-slim AS runtime
 
