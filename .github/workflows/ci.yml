@@ -1,6 +1,6 @@
 # CI = "is this commit correct?" It never deploys anything.
-# Runs on every push and PR. Fast lane first (lint), then tests, then the ML
-# quality gate, then a Docker build that must actually boot and answer.
+# Runs on every push to main and on every PR. Fast lane first (lint), then tests,
+# ML quality gates, security scans, and finally a Docker image that must boot.
 name: ci
 
 on:
@@ -33,9 +33,9 @@ jobs:
           cache: pip
       - run: pip install -r requirements-dev.txt
 
-      # Artifacts are not in git (they are build outputs, and a 23 MB binary in
-      # git history is a maintenance tax). CI rebuilds them from source data, so
-      # the pipeline itself is tested on every commit.
+      # Rebuild source-derived artifacts on every commit. This proves that the
+      # checked-in demo artifacts remain reproducible from source and also gives
+      # us fresh artifacts to publish from a successful workflow run.
       - name: Build artifacts
         run: |
           python -m training.prepare_data
@@ -45,7 +45,6 @@ jobs:
       - name: Unit and integration tests
         run: pytest -q --cov=src/app --cov-report=term-missing
 
-      # --- the gate that can block a release ---------------------------------
       - name: ML quality gate
         run: |
           python -m training.evaluate
@@ -102,6 +101,9 @@ jobs:
           context: .
           push: false
           load: true
+          pull: true
+          provenance: false
+          sbom: false
           tags: novabank-assistant:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -109,6 +111,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: novabank-assistant:${{ github.sha }}
+          scanners: vuln
           severity: HIGH,CRITICAL
           exit-code: "1"
           ignore-unfixed: true
