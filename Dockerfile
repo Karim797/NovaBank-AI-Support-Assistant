@@ -36,6 +36,7 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && \
     apt-get upgrade -y && \
     rm -rf /var/lib/apt/lists/* && \
+    python -m pip uninstall -y setuptools msgpack || true; \
     useradd --create-home --uid 10001 appuser
 WORKDIR /app
 
