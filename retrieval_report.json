@@ -1,0 +1,456 @@
+{
+  "k": {
+    "recall@1": 0.8333,
+    "mrr@1": 0.8333,
+    "recall@3": 0.9,
+    "mrr@3": 0.8611,
+    "recall@4": 0.9,
+    "mrr@4": 0.8611,
+    "recall@8": 0.9333,
+    "mrr@8": 0.8667,
+    "recall@4_topic_filtered": 1.0,
+    "mrr@4_topic_filtered": 0.9778
+  },
+  "queries": [
+    {
+      "query": "my card was charged twice for the same thing",
+      "expected": [
+        "duplicate-and-unrecognised-charges"
+      ],
+      "retrieved_docs": [
+        "duplicate-and-unrecognised-charges",
+        "fraud-and-security",
+        "virtual-and-disposable-cards",
+        "fees-and-charges"
+      ],
+      "top_score": 0.2534,
+      "hit": true
+    },
+    {
+      "query": "how long does a pending atm withdrawal take to clear",
+      "expected": [
+        "cash-withdrawals-and-atms",
+        "pending-and-failed-transactions"
+      ],
+      "retrieved_docs": [
+        "cash-withdrawals-and-atms",
+        "pending-and-failed-transactions",
+        "cash-withdrawals-and-atms",
+        "exchange-rates-and-fx"
+      ],
+      "top_score": 0.3177,
+      "hit": true
+    },
+    {
+      "query": "how do I replace a card I lost",
+      "expected": [
+        "lost-stolen-and-compromised-cards"
+      ],
+      "retrieved_docs": [
+        "lost-stolen-and-compromised-cards",
+        "lost-stolen-and-compromised-cards",
+        "lost-stolen-and-compromised-cards",
+        "lost-stolen-and-compromised-cards"
+      ],
+      "top_score": 0.2248,
+      "hit": true
+    },
+    {
+      "query": "what does an international swift transfer cost",
+      "expected": [
+        "fees-and-charges",
+        "transfers-domestic-and-international"
+      ],
+      "retrieved_docs": [
+        "transfers-domestic-and-international",
+        "transfers-domestic-and-international",
+        "fees-and-charges",
+        "transfers-domestic-and-international"
+      ],
+      "top_score": 0.1387,
+      "hit": true
+    },
+    {
+      "query": "why was my transfer rejected",
+      "expected": [
+        "transfers-domestic-and-international"
+      ],
+      "retrieved_docs": [
+        "transfers-domestic-and-international",
+        "pending-and-failed-transactions",
+        "transfers-domestic-and-international",
+        "pending-and-failed-transactions"
+      ],
+      "top_score": 0.1707,
+      "hit": true
+    },
+    {
+      "query": "how much can I withdraw from an atm each day",
+      "expected": [
+        "cash-withdrawals-and-atms",
+        "limits"
+      ],
+      "retrieved_docs": [
+        "cash-withdrawals-and-atms",
+        "cash-withdrawals-and-atms",
+        "cash-withdrawals-and-atms",
+        "identity-verification-kyc"
+      ],
+      "top_score": 0.2129,
+      "hit": true
+    },
+    {
+      "query": "can I pay in a cheque",
+      "expected": [
+        "pending-and-failed-transactions",
+        "top-ups-and-deposits"
+      ],
+      "retrieved_docs": [
+        "virtual-and-disposable-cards",
+        "pending-and-failed-transactions",
+        "cash-withdrawals-and-atms",
+        "lost-stolen-and-compromised-cards"
+      ],
+      "top_score": 0.1955,
+      "hit": true
+    },
+    {
+      "query": "the exchange rate on my card payment looks wrong",
+      "expected": [
+        "exchange-rates-and-fx"
+      ],
+      "retrieved_docs": [
+        "exchange-rates-and-fx",
+        "exchange-rates-and-fx",
+        "cash-withdrawals-and-atms",
+        "exchange-rates-and-fx"
+      ],
+      "top_score": 0.3141,
+      "hit": true
+    },
+    {
+      "query": "my contactless has stopped working",
+      "expected": [
+        "card-activation-and-pin"
+      ],
+      "retrieved_docs": [
+        "card-activation-and-pin",
+        "card-activation-and-pin",
+        "limits",
+        "mobile-banking-and-app"
+      ],
+      "top_score": 0.3198,
+      "hit": true
+    },
+    {
+      "query": "I entered my pin wrong three times and now it is blocked",
+      "expected": [
+        "card-activation-and-pin"
+      ],
+      "retrieved_docs": [
+        "card-activation-and-pin",
+        "card-payments-and-declines",
+        "cards-ordering-and-delivery",
+        "cash-withdrawals-and-atms"
+      ],
+      "top_score": 0.2566,
+      "hit": true
+    },
+    {
+      "query": "how long until my new card arrives",
+      "expected": [
+        "cards-ordering-and-delivery"
+      ],
+      "retrieved_docs": [
+        "top-ups-and-deposits",
+        "card-activation-and-pin",
+        "identity-verification-kyc",
+        "pending-and-failed-transactions"
+      ],
+      "top_score": 0.0876,
+      "hit": false
+    },
+    {
+      "query": "refund from a shop has not arrived yet",
+      "expected": [
+        "refunds-and-chargebacks"
+      ],
+      "retrieved_docs": [
+        "refunds-and-chargebacks",
+        "cards-ordering-and-delivery",
+        "refunds-and-chargebacks",
+        "refunds-and-chargebacks"
+      ],
+      "top_score": 0.2304,
+      "hit": true
+    },
+    {
+      "query": "what is a chargeback and how long do I have",
+      "expected": [
+        "refunds-and-chargebacks"
+      ],
+      "retrieved_docs": [
+        "refunds-and-chargebacks",
+        "identity-verification-kyc",
+        "refunds-and-chargebacks",
+        "refunds-and-chargebacks"
+      ],
+      "top_score": 0.1197,
+      "hit": true
+    },
+    {
+      "query": "why do you need my passport and a selfie",
+      "expected": [
+        "identity-verification-kyc"
+      ],
+      "retrieved_docs": [
+        "identity-verification-kyc",
+        "accounts-and-eligibility",
+        "mobile-banking-and-app",
+        "identity-verification-kyc"
+      ],
+      "top_score": 0.2106,
+      "hit": true
+    },
+    {
+      "query": "identity verification keeps failing",
+      "expected": [
+        "identity-verification-kyc"
+      ],
+      "retrieved_docs": [
+        "identity-verification-kyc",
+        "limits",
+        "identity-verification-kyc",
+        "mobile-banking-and-app"
+      ],
+      "top_score": 0.2532,
+      "hit": true
+    },
+    {
+      "query": "you asked me to prove where my money came from",
+      "expected": [
+        "identity-verification-kyc"
+      ],
+      "retrieved_docs": [
+        "top-ups-and-deposits",
+        "pending-and-failed-transactions",
+        "pending-and-failed-transactions",
+        "cash-withdrawals-and-atms"
+      ],
+      "top_score": 0.1453,
+      "hit": false
+    },
+    {
+      "query": "top up by card failed",
+      "expected": [
+        "top-ups-and-deposits"
+      ],
+      "retrieved_docs": [
+        "pending-and-failed-transactions",
+        "fees-and-charges",
+        "top-ups-and-deposits",
+        "card-payments-and-declines"
+      ],
+      "top_score": 0.1487,
+      "hit": true
+    },
+    {
+      "query": "is there a fee for topping up with my debit card",
+      "expected": [
+        "fees-and-charges",
+        "top-ups-and-deposits"
+      ],
+      "retrieved_docs": [
+        "top-ups-and-deposits",
+        "top-ups-and-deposits",
+        "general-faq",
+        "card-payments-and-declines"
+      ],
+      "top_score": 0.2015,
+      "hit": true
+    },
+    {
+      "query": "money I sent by bank transfer has not shown up in my balance",
+      "expected": [
+        "pending-and-failed-transactions",
+        "top-ups-and-deposits"
+      ],
+      "retrieved_docs": [
+        "pending-and-failed-transactions",
+        "pending-and-failed-transactions",
+        "top-ups-and-deposits",
+        "transfers-domestic-and-international"
+      ],
+      "top_score": 0.1627,
+      "hit": true
+    },
+    {
+      "query": "can I use apple pay",
+      "expected": [
+        "virtual-and-disposable-cards"
+      ],
+      "retrieved_docs": [
+        "virtual-and-disposable-cards",
+        "cash-withdrawals-and-atms",
+        "lost-stolen-and-compromised-cards",
+        "general-faq"
+      ],
+      "top_score": 0.3899,
+      "hit": true
+    },
+    {
+      "query": "how many disposable cards can I have",
+      "expected": [
+        "limits",
+        "virtual-and-disposable-cards"
+      ],
+      "retrieved_docs": [
+        "virtual-and-disposable-cards",
+        "virtual-and-disposable-cards",
+        "virtual-and-disposable-cards",
+        "fraud-and-security"
+      ],
+      "top_score": 0.3545,
+      "hit": true
+    },
+    {
+      "query": "do you accept mastercard",
+      "expected": [
+        "card-payments-and-declines",
+        "cards-ordering-and-delivery"
+      ],
+      "retrieved_docs": [
+        "card-payments-and-declines",
+        "cards-ordering-and-delivery",
+        "cash-withdrawals-and-atms",
+        "pending-and-failed-transactions"
+      ],
+      "top_score": 0.211,
+      "hit": true
+    },
+    {
+      "query": "someone used my card details without permission",
+      "expected": [
+        "duplicate-and-unrecognised-charges",
+        "fraud-and-security",
+        "lost-stolen-and-compromised-cards"
+      ],
+      "retrieved_docs": [
+        "top-ups-and-deposits",
+        "virtual-and-disposable-cards",
+        "card-activation-and-pin",
+        "refunds-and-chargebacks"
+      ],
+      "top_score": 0.1107,
+      "hit": false
+    },
+    {
+      "query": "an atm gave me less cash than it took",
+      "expected": [
+        "cash-withdrawals-and-atms"
+      ],
+      "retrieved_docs": [
+        "cash-withdrawals-and-atms",
+        "cash-withdrawals-and-atms",
+        "cash-withdrawals-and-atms",
+        "cash-withdrawals-and-atms"
+      ],
+      "top_score": 0.2134,
+      "hit": true
+    },
+    {
+      "query": "I want to close my account",
+      "expected": [
+        "accounts-and-eligibility"
+      ],
+      "retrieved_docs": [
+        "accounts-and-eligibility",
+        "accounts-and-eligibility",
+        "transfers-domestic-and-international",
+        "mobile-banking-and-app"
+      ],
+      "top_score": 0.2417,
+      "hit": true
+    },
+    {
+      "query": "how old do you have to be to open an account",
+      "expected": [
+        "accounts-and-eligibility"
+      ],
+      "retrieved_docs": [
+        "accounts-and-eligibility",
+        "mobile-banking-and-app",
+        "mobile-banking-and-app",
+        "cards-ordering-and-delivery"
+      ],
+      "top_score": 0.1353,
+      "hit": true
+    },
+    {
+      "query": "how do I cancel a transfer I just sent",
+      "expected": [
+        "transfers-domestic-and-international"
+      ],
+      "retrieved_docs": [
+        "transfers-domestic-and-international",
+        "transfers-domestic-and-international",
+        "card-payments-and-declines",
+        "pending-and-failed-transactions"
+      ],
+      "top_score": 0.1662,
+      "hit": true
+    },
+    {
+      "query": "my card payment was declined at a shop",
+      "expected": [
+        "card-payments-and-declines"
+      ],
+      "retrieved_docs": [
+        "card-payments-and-declines",
+        "virtual-and-disposable-cards",
+        "card-payments-and-declines",
+        "general-faq"
+      ],
+      "top_score": 0.3174,
+      "hit": true
+    },
+    {
+      "query": "is my money protected if you go bust",
+      "expected": [
+        "general-faq"
+      ],
+      "retrieved_docs": [
+        "general-faq",
+        "pending-and-failed-transactions",
+        "pending-and-failed-transactions",
+        "cash-withdrawals-and-atms"
+      ],
+      "top_score": 0.3461,
+      "hit": true
+    },
+    {
+      "query": "I lost my phone",
+      "expected": [
+        "lost-stolen-and-compromised-cards",
+        "mobile-banking-and-app"
+      ],
+      "retrieved_docs": [
+        "lost-stolen-and-compromised-cards",
+        "accounts-and-eligibility",
+        "lost-stolen-and-compromised-cards",
+        "lost-stolen-and-compromised-cards"
+      ],
+      "top_score": 0.2801,
+      "hit": true
+    }
+  ],
+  "n_in_scope": 30,
+  "n_out_of_scope": 4,
+  "relevance_floor": 0.15,
+  "refusal_rate_out_of_scope": 1.0,
+  "gate": {
+    "min_recall@4": 0.85,
+    "min_refusal_rate": 0.75,
+    "passed": true
+  }
+}

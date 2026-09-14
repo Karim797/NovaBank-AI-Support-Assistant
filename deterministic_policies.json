@@ -1,0 +1,26 @@
+{
+ "schema_version": 1,
+ "note": "Safety-critical, action-first answers. These are never paraphrased by an LLM: the wording is reviewed by Compliance and must reach the customer unchanged.",
+ "policies": {
+  "POL_LOST_STOLEN_CARD": {
+   "answer": "Freeze the card right now in the app: Cards > Freeze card. Freezing is instant and blocks all new payments.\n\nThen choose Report lost or stolen, which permanently cancels the card number and starts a replacement. Your first replacement in any 12-month period is free; after that the card replacement fee is GBP 5. A replacement arrives in 3-5 business days in the UK.\n\nIf you cannot get into the app, call the 24/7 lost and stolen line on 0800 000 0000.\n\nYou are not liable for anything spent after you report the card. If you see payments you did not make before that point, report each one so it can be investigated.",
+   "sources": ["lost-stolen-and-compromised-cards#immediate-action-freeze-the-card", "lost-stolen-and-compromised-cards#reporting-it-and-ordering-a-replacement"],
+   "escalate": true
+  },
+  "POL_COMPROMISED_CARD": {
+   "answer": "Freeze the card now in Cards > Freeze card, then choose Report compromised.\n\nNovaBank will issue a new card number free of charge and review the last 90 days of transactions. Anything you did not authorise should be reported so it can be refunded.\n\nNovaBank will never ask for your PIN, passcode, one-time code or CVV, and will never ask you to move money to a \"safe account\". If someone asked you for any of those, treat it as a scam and call 0800 000 0000.",
+   "sources": ["lost-stolen-and-compromised-cards#suspected-compromised-card-details", "fraud-and-security#what-novabank-will-never-ask-for"],
+   "escalate": true
+  },
+  "POL_LOST_PHONE": {
+   "answer": "Your money is not exposed by the phone alone - the app needs your passcode or biometrics.\n\nDo these three things:\n1. Sign in on another device and choose \"This is my new device\", then remove the old one in Profile > Devices.\n2. Remove any Apple Pay or Google Pay card in Cards > Digital wallets.\n3. Ask your mobile operator to block the SIM, because one-time codes are sent to it.\n\nIf you cannot sign in anywhere, call 0800 000 0000 (24/7).",
+   "sources": ["lost-stolen-and-compromised-cards#lost-or-stolen-phone"],
+   "escalate": false
+  },
+  "POL_CARD_SWALLOWED": {
+   "answer": "Freeze the card in the app first: Cards > Freeze card.\n\nIf the ATM belongs to another bank, contact the ATM operator using the number displayed on the machine - NovaBank cannot recover a card from another bank's ATM, and retained cards are destroyed by the operator. Order a replacement in the app.\n\nIf the ATM was NovaBank-branded, report it in the app and the GBP 5 replacement fee is waived.",
+   "sources": ["lost-stolen-and-compromised-cards#card-swallowed-by-an-atm"],
+   "escalate": false
+  }
+ }
+}

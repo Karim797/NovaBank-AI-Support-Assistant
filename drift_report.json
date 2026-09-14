@@ -1,0 +1,32 @@
+{
+  "n_current": 330,
+  "n_reference": 3080,
+  "confidence_psi": 3.5137,
+  "intent_mix_psi": 10.4421,
+  "ks_statistic": 0.2884,
+  "ks_pvalue": 0.0,
+  "low_confidence_share": 0.303,
+  "reference_low_confidence_share": 0.0942,
+  "refusal_share": 0.4848,
+  "p95_latency_ms": 58,
+  "escalation_share": 0.4848,
+  "top_intents": {
+    "card_arrival": 120,
+    "card_delivery_estimate": 80,
+    "verify_my_identity": 20,
+    "card_payment_not_recognised": 20,
+    "unable_to_verify_identity": 20
+  },
+  "new_intents_vs_reference": [],
+  "model_versions_served": [
+    "intent-clf-v1"
+  ],
+  "alerts": [
+    "ALERT: confidence PSI 3.514 > 0.25",
+    "ALERT: intent-mix PSI 10.442 > 0.25",
+    "ALERT: KS statistic 0.288 (p=2.1e-22)",
+    "ALERT: 30.3% of traffic below the routing threshold",
+    "ALERT: 48.5% of answers were refusals - check retrieval and the KB"
+  ],
+  "interpretation": "Drift in P(X) alone does not mean the model degraded. Confirm with the feedback join (predictions.request_id -> feedback.request_id) before retraining."
+}

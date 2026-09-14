@@ -1,0 +1,123 @@
+{
+  "model_version": "intent-clf-v1",
+  "n_test": 3080,
+  "test_macro_f1": 0.9125,
+  "test_macro_f1_dedup": 0.9123,
+  "n_test_dedup": 3074,
+  "test_weighted_f1": 0.9125,
+  "test_accuracy": 0.9123,
+  "confidence_threshold": 0.45,
+  "coverage_at_threshold": 0.9058,
+  "accuracy_on_confident": 0.9545,
+  "accuracy_on_low_confidence": 0.5069,
+  "mean_confidence": 0.8228,
+  "worst_10_intents": [
+    {
+      "intent": "balance_not_updated_after_bank_transfer",
+      "f1": 0.744,
+      "support": 40
+    },
+    {
+      "intent": "top_up_failed",
+      "f1": 0.8,
+      "support": 40
+    },
+    {
+      "intent": "pending_transfer",
+      "f1": 0.815,
+      "support": 40
+    },
+    {
+      "intent": "why_verify_identity",
+      "f1": 0.819,
+      "support": 40
+    },
+    {
+      "intent": "virtual_card_not_working",
+      "f1": 0.824,
+      "support": 40
+    },
+    {
+      "intent": "card_not_working",
+      "f1": 0.826,
+      "support": 40
+    },
+    {
+      "intent": "wrong_exchange_rate_for_cash_withdrawal",
+      "f1": 0.835,
+      "support": 40
+    },
+    {
+      "intent": "failed_transfer",
+      "f1": 0.837,
+      "support": 40
+    },
+    {
+      "intent": "unable_to_verify_identity",
+      "f1": 0.85,
+      "support": 40
+    },
+    {
+      "intent": "get_disposable_virtual_card",
+      "f1": 0.854,
+      "support": 40
+    }
+  ],
+  "top_confusions": [
+    {
+      "true": "verify_my_identity",
+      "predicted": "why_verify_identity",
+      "count": 5
+    },
+    {
+      "true": "virtual_card_not_working",
+      "predicted": "get_disposable_virtual_card",
+      "count": 5
+    },
+    {
+      "true": "pending_top_up",
+      "predicted": "top_up_failed",
+      "count": 4
+    },
+    {
+      "true": "top_up_failed",
+      "predicted": "top_up_reverted",
+      "count": 4
+    },
+    {
+      "true": "unable_to_verify_identity",
+      "predicted": "why_verify_identity",
+      "count": 4
+    },
+    {
+      "true": "why_verify_identity",
+      "predicted": "unable_to_verify_identity",
+      "count": 4
+    },
+    {
+      "true": "balance_not_updated_after_bank_transfer",
+      "predicted": "pending_transfer",
+      "count": 3
+    },
+    {
+      "true": "balance_not_updated_after_bank_transfer",
+      "predicted": "transfer_not_received_by_recipient",
+      "count": 3
+    },
+    {
+      "true": "card_acceptance",
+      "predicted": "card_not_working",
+      "count": 3
+    },
+    {
+      "true": "card_arrival",
+      "predicted": "card_delivery_estimate",
+      "count": 3
+    }
+  ],
+  "quality_gate": {
+    "metric": "test_macro_f1",
+    "minimum": 0.85,
+    "passed": true
+  }
+}

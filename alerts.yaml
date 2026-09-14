@@ -1,0 +1,83 @@
+# Alert rules for the NovaBank assistant.
+#
+# Written as a portable YAML spec rather than Prometheus rule syntax because the
+# target platform is Azure Monitor; the same conditions translate directly to
+# either. Every rule states what it means and what to do, because an alert
+# nobody knows how to action is noise that trains people to ignore the pager.
+#
+# Rule of thumb applied throughout: page on *service* symptoms, ticket on *model*
+# symptoms. A model metric moving is a "go and look" signal, never a 3am page,
+# and never an automatic retrain trigger.
+
+service:
+  - name: HighErrorRate
+    expr: rate(nb_requests_total{status="5xx"}[5m]) / rate(nb_requests_total[5m]) > 0.02
+    for: 5m
+    severity: page
+    meaning: More than 2% of requests are failing.
+    action: Check /ready on each replica, then container logs for the last deploy tag. Roll back if it correlates with a release.
+
+  - name: LatencyP95Regression
+    expr: nb_request_latency_ms{quantile="0.95"} > 2500
+    for: 10m
+    severity: page
+    meaning: p95 above the 2.5 s budget (LLM call dominates this).
+    action: Check the LLM provider status page and nb_llm_failures_total. Consider temporarily setting LLM_PROVIDER=extractive to keep the service answering in degraded mode.
+
+  - name: ReadinessFlapping
+    expr: changes(kube_pod_container_status_ready[15m]) > 4
+    for: 15m
+    severity: page
+    meaning: Pods are cycling in and out of the load balancer.
+    action: Usually an artifact load failure or memory limit. Check startup logs for classifier_load_failed / index_load_failed.
+
+  - name: LLMProviderFailures
+    expr: increase(nb_llm_failures_total[10m]) > 5
+    for: 0m
+    severity: page
+    meaning: The generation provider is failing after retries; users are getting the degraded refusal.
+    action: Provider status page; failover to the extractive provider if the outage is sustained.
+
+model_and_data:
+  - name: LowConfidenceShareUp
+    expr: share_of_predictions_below_threshold > 0.20
+    window: 24h
+    baseline: 0.094          # measured on the reference window (reports/eval_report.json)
+    severity: ticket
+    meaning: Twice as much traffic as expected is falling below the routing threshold.
+    action: Sample the low-confidence questions. Either a new topic has appeared (add KB content and, if it is a recurring intent, retrain) or an upstream channel is sending malformed text.
+
+  - name: RefusalRateUp
+    expr: share_of_answers_with_route_in(no_relevant_context, ungrounded_answer) > 0.15
+    window: 24h
+    severity: ticket
+    meaning: The assistant is declining more often. Usually a knowledge-base gap, not a model fault.
+    action: Group refusals by predicted intent; the top group names the missing document.
+
+  - name: ConfidencePSI
+    expr: psi(confidence_distribution) > 0.25
+    window: 24h
+    severity: ticket
+    meaning: Input distribution has shifted materially (data drift).
+    action: Investigate. Do NOT retrain automatically - P(X) moving does not imply P(y|X) moved. Confirm against the feedback signal before touching the model.
+
+  - name: NewIntentMixSpike
+    expr: any_intent_share_change > 3x_baseline
+    window: 24h
+    severity: ticket
+    meaning: One intent has taken over the traffic mix.
+    action: Often legitimate (an incident, a campaign, a card-delivery backlog). Correlate with ops before treating it as a model problem.
+
+  - name: HelpfulnessDrop
+    expr: rolling_7d_helpful_rate < 0.70
+    window: 7d
+    severity: ticket
+    meaning: The clearest available proxy for real quality degradation (concept drift).
+    action: Join feedback to predictions on request_id, read the thumbs-down cases, check whether a policy document changed without the KB being rebuilt (compare corpus_sha256 in reports/index_report.json).
+
+  - name: EscalationRateUp
+    expr: share_of_answers_needing_human > 0.25
+    window: 24h
+    severity: ticket
+    meaning: More traffic than expected is being handed to agents; a staffing signal as much as a model one.
+    action: Break down by route; escalations from deterministic policies are healthy, escalations from ungrounded_answer are not.

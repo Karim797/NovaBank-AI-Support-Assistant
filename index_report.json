@@ -1,0 +1,27 @@
+{
+  "index_version": "kb-index-v1",
+  "n_documents": 19,
+  "n_chunks": 107,
+  "topics": [
+    "accounts",
+    "app",
+    "cards",
+    "cash",
+    "disputes",
+    "fees",
+    "fx",
+    "general",
+    "kyc",
+    "limits",
+    "payments",
+    "security",
+    "topups",
+    "transactions",
+    "transfers"
+  ],
+  "chunk_chars_min": 152,
+  "chunk_chars_max": 1055,
+  "chunk_chars_mean": 339.4,
+  "corpus_sha256": "201005c0cd0fa1961feb9f30226b173e572d291f6d4b9c8b0fddcd9fb444c5eb",
+  "built_at": "2026-09-14T07:15:46.892234+00:00"
+}

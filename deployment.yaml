@@ -1,0 +1,99 @@
+# Kubernetes manifests, provided as reference. The MVP deploys to Azure
+# Container Apps (deploy/azure/), which covers autoscaling, revisions, traffic
+# splitting and managed TLS without a cluster to run. These manifests exist to
+# show the mapping, and become the right choice when the workload needs
+# cluster-level control (GPU pools, service mesh, multi-service networking).
+#
+# Concept map:
+#   Pod            one running container instance
+#   Deployment     desired replica count + rollout strategy for those Pods
+#   Service        stable in-cluster DNS name and load balancing across Pods
+#   ConfigMap      non-secret configuration injected as env vars
+#   Secret         sensitive values (prefer CSI + Key Vault over base64 in etcd)
+#   readinessProbe -> /ready  : fail = removed from the Service, no restart
+#   livenessProbe  -> /health : fail = container is restarted
+#   HPA            scales replicas on observed load
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: novabank-config
+data:
+  APP_ENV: "production"
+  LOG_LEVEL: "INFO"
+  LLM_PROVIDER: "anthropic"
+  CONFIDENCE_THRESHOLD: "0.45"
+  RETRIEVAL_TOP_K: "4"
+  RETRIEVAL_MIN_SCORE: "0.15"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: novabank-assistant
+  labels: { app: novabank-assistant }
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }   # no capacity dip mid-rollout
+  selector:
+    matchLabels: { app: novabank-assistant }
+  template:
+    metadata:
+      labels: { app: novabank-assistant }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: api
+          image: novabankacr.azurecr.io/novabank-assistant:REPLACED_BY_CI   # never :latest
+          ports: [{ containerPort: 8000 }]
+          envFrom:
+            - configMapRef: { name: novabank-config }
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef: { name: novabank-secrets, key: anthropic-api-key }
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits:   { cpu: "1000m", memory: "1Gi" }
+          readinessProbe:
+            httpGet: { path: /ready, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 3
+          startupProbe:                 # gives a slow first artifact load room
+            httpGet: { path: /health, port: 8000 }
+            failureThreshold: 30
+            periodSeconds: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: novabank-assistant
+spec:
+  selector: { app: novabank-assistant }
+  ports: [{ port: 80, targetPort: 8000 }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: novabank-assistant
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: novabank-assistant }
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+# Rollback: kubectl rollout undo deployment/novabank-assistant
+# History:  kubectl rollout history deployment/novabank-assistant

@@ -1,0 +1,28 @@
+{
+  "n_train": 10003,
+  "n_test": 3080,
+  "n_labels_train": 77,
+  "n_labels_test": 77,
+  "labels_only_in_train": [],
+  "labels_only_in_test": [],
+  "duplicate_texts_within_train": 4,
+  "duplicate_texts_within_test": 1,
+  "train_test_exact_overlap": 6,
+  "train_test_overlap_pct_of_test": 0.195,
+  "overlap_examples": [
+    "at which atms can i use this card?",
+    "how do i unblock my pin?",
+    "there are a few transaction that i don't recognize, i think someone managed to get my card details and use it.",
+    "what businesses accept this card?",
+    "where can i use my card?"
+  ],
+  "class_count_min": 35,
+  "class_count_max": 187,
+  "class_imbalance_ratio": 5.34,
+  "sha256_train": "b06e26ac675513959a63135f11b94ea7786ed02da65db93a5650d8838cbc664b",
+  "sha256_test": "d12d6e3bc4c3103966ae786dc435913c0c563dfa328f5a3646d0e62cfeeb474d",
+  "n_train_split": 8502,
+  "n_val_split": 1501,
+  "val_size": 0.15,
+  "random_state": 42
+}
