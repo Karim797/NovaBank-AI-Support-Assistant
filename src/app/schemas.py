@@ -105,6 +105,7 @@ class ReadyResponse(BaseModel):
     checks: dict[str, bool]
     model_version: str | None = None
     index_version: str | None = None
+    corpus_sha256: str | None = None
     llm_provider: str
     confidence_threshold: float | None
 

@@ -30,6 +30,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from app.classifier import IntentClassifier
 from app.config import settings
 from app.feedback import FeedbackStore, ensure_parent
+from app.kb import corpus_sha256
 from app.llm import build_llm
 from app.logging_config import configure_logging, request_id_var, text_fingerprint
 from app.observability import RateLimiter, metrics
@@ -60,11 +61,30 @@ def _load_state(app: FastAPI) -> None:
         app.state.errors["classifier"] = str(exc)
         logger.error("classifier_load_failed", exc_info=exc)
 
+    app.state.corpus_sha256 = None
+    app.state.corpus_fresh = False
     try:
         app.state.index = joblib.load(settings.resolve(settings.index_path))
+        current_corpus = corpus_sha256(settings.resolve(settings.knowledge_base_dir))
+        artifact_corpus = str(app.state.index.metadata.get("corpus_sha256", ""))
+        app.state.corpus_sha256 = current_corpus
+        app.state.corpus_fresh = bool(artifact_corpus) and artifact_corpus == current_corpus
+        if not app.state.corpus_fresh:
+            app.state.errors["corpus"] = (
+                "knowledge-base content does not match the retrieval index; rebuild the index"
+            )
+            logger.error(
+                "corpus_index_mismatch",
+                extra={"artifact_corpus_sha256": artifact_corpus, "corpus_sha256": current_corpus},
+            )
         logger.info(
             "index_loaded",
-            extra={"index_version": app.state.index.version, "n_chunks": app.state.index.n_chunks},
+            extra={
+                "index_version": app.state.index.version,
+                "n_chunks": app.state.index.n_chunks,
+                "corpus_sha256": current_corpus,
+                "corpus_fresh": app.state.corpus_fresh,
+            },
         )
     except Exception as exc:  # noqa: BLE001
         app.state.index = None
@@ -78,7 +98,7 @@ def _load_state(app: FastAPI) -> None:
         app.state.errors["llm"] = str(exc)
         logger.error("llm_init_failed", exc_info=exc)
 
-    if app.state.classifier and app.state.index and app.state.llm:
+    if app.state.classifier and app.state.index and app.state.llm and app.state.corpus_fresh:
         app.state.router = SupportRouter(
             app.state.classifier, app.state.index, app.state.llm, settings
         )
@@ -188,6 +208,7 @@ def ready(request: Request) -> JSONResponse:
     checks = {
         "classifier": state.classifier is not None,
         "index": state.index is not None,
+        "corpus_fresh": bool(getattr(state, "corpus_fresh", False)),
         "llm": state.llm is not None,
         "router": state.router is not None,
         "store": getattr(state, "store", None) is not None,
@@ -197,6 +218,7 @@ def ready(request: Request) -> JSONResponse:
         checks=checks,
         model_version=state.classifier.model_version if state.classifier else None,
         index_version=state.index.version if state.index else None,
+        corpus_sha256=getattr(state, "corpus_sha256", None),
         llm_provider=settings.llm_provider,
         confidence_threshold=(
             settings.confidence_threshold
@@ -269,7 +291,12 @@ def chat_batch(payload: BatchChatRequest, request: Request) -> list[ChatResponse
     return out
 
 
-@app.post("/feedback", response_model=FeedbackResponse, tags=["assistant"])
+@app.post(
+    "/feedback",
+    response_model=FeedbackResponse,
+    tags=["assistant"],
+    dependencies=[Depends(require_api_key)],
+)
 def feedback(payload: FeedbackRequest, request: Request) -> FeedbackResponse:
     known = request.app.state.store.log_feedback(
         payload.request_id, payload.helpful, payload.comment
@@ -281,12 +308,17 @@ def feedback(payload: FeedbackRequest, request: Request) -> FeedbackResponse:
     return FeedbackResponse(status="recorded", request_id=payload.request_id)
 
 
-@app.get("/metrics", response_class=PlainTextResponse, tags=["ops"])
+@app.get(
+    "/metrics",
+    response_class=PlainTextResponse,
+    tags=["ops"],
+    dependencies=[Depends(require_api_key)],
+)
 def prometheus_metrics() -> str:
     return metrics.prometheus()
 
 
-@app.get("/stats", tags=["ops"])
+@app.get("/stats", tags=["ops"], dependencies=[Depends(require_api_key)])
 def stats(request: Request) -> dict:
     n, rate = request.app.state.store.helpfulness_rate()
     return {**metrics.snapshot(), "feedback_count": n, "helpful_rate": rate}

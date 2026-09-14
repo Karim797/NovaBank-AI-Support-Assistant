@@ -18,7 +18,9 @@ def test_ready_reports_loaded_dependencies(client):
     body = r.json()
     assert body["status"] == "ready"
     assert all(body["checks"].values())
+    assert body["checks"]["corpus_fresh"] is True
     assert body["model_version"] and body["index_version"]
+    assert body["corpus_sha256"]
 
 
 def test_chat_returns_the_full_contract(client):
@@ -87,8 +89,19 @@ def test_deterministic_route_is_visible_to_the_caller(client):
 
 def test_api_key_is_enforced_when_configured(authed_client):
     assert authed_client.post("/chat", json={"question": "lost my card"}).status_code == 401
-    assert authed_client.get("/health").status_code == 200  # probes stay open
-    ok = authed_client.post(
-        "/chat", json={"question": "lost my card"}, headers={"x-api-key": "s3cret"}
-    )
+
+    # Liveness/readiness remain public so Railway and the Streamlit status panel
+    # can probe the service, but customer/operational data surfaces are private.
+    assert authed_client.get("/health").status_code == 200
+    assert authed_client.get("/ready").status_code == 200
+    assert authed_client.get("/stats").status_code == 401
+    assert authed_client.get("/metrics").status_code == 401
+    assert authed_client.post(
+        "/feedback", json={"request_id": "12345678", "helpful": True}
+    ).status_code == 401
+
+    headers = {"x-api-key": "s3cret"}
+    ok = authed_client.post("/chat", json={"question": "lost my card"}, headers=headers)
     assert ok.status_code == 200
+    assert authed_client.get("/stats", headers=headers).status_code == 200
+    assert authed_client.get("/metrics", headers=headers).status_code == 200

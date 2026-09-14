@@ -37,6 +37,7 @@ better-behaved probability wins.
 from __future__ import annotations
 
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -65,11 +66,20 @@ TARGET_COVERAGE = 0.90  # keep >=90% of traffic on the confident path
 
 
 def git_sha() -> str:
+    """Capture source revision in CI and normal git checkouts.
+
+    CI sets SOURCE_GIT_SHA to the PR head (rather than GitHub's temporary merge
+    revision). Falling back to GITHUB_SHA and then git keeps other environments
+    reproducible; `unknown` is reserved for exported source trees with no
+    revision information.
+    """
+    if sha := os.getenv("SOURCE_GIT_SHA") or os.getenv("GITHUB_SHA"):
+        return sha[:12]
     try:
         return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], cwd=REPO_ROOT, stderr=subprocess.DEVNULL
+            ["git", "rev-parse", "--short=12", "HEAD"], cwd=REPO_ROOT, stderr=subprocess.DEVNULL
         ).decode().strip()
-    except Exception:  # noqa: BLE001 - not a git checkout (e.g. inside Docker build)
+    except Exception:  # noqa: BLE001 - source archive without .git metadata
         return "unknown"
 
 
@@ -173,6 +183,7 @@ def main() -> int:
         "random_state": 42,
         "n_train": int(len(train)),
         "n_val": int(len(val)),
+        "n_train_rows": int(len(full)),
         "n_train_full_refit": int(len(full)),
         "n_labels": len(labels),
         "confidence_threshold": threshold,
