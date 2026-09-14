@@ -17,6 +17,7 @@ its length. No chunk should be a bare heading, and none should exceed MAX_CHARS.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -61,6 +62,15 @@ def iter_kb_documents(kb_dir: Path) -> list[Path]:
         for path in sorted(Path(kb_dir).glob("*.md"))
         if path.name.lower() != "readme.md"
     ]
+
+
+def corpus_sha256(kb_dir: Path) -> str:
+    """Hash exactly the policy documents returned by `iter_kb_documents`."""
+    h = hashlib.sha256()
+    for path in iter_kb_documents(kb_dir):
+        h.update(path.name.encode())
+        h.update(path.read_bytes())
+    return h.hexdigest()
 
 
 def parse_front_matter(raw: str) -> tuple[dict[str, str], str]:
