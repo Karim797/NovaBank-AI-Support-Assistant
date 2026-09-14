@@ -8,9 +8,10 @@ the disagreements are where the learning is.
 
 ## D1 — The router is deterministic code, the LLM is a text generator
 
-**Decision.** Path selection, document scoping, answer admission and escalation
-are `if` statements over a probability, a retrieval score and a JSON lookup
-table (`src/app/router.py`). The LLM's only job is prose from supplied passages.
+**Decision.** Path selection, retrieval conditioning, answer admission and
+escalation are `if` statements over a probability, a retrieval score and a JSON
+lookup table (`src/app/router.py`). The LLM's only job is prose from supplied
+passages.
 
 **Reason.** Every one of those decisions needs to be auditable, tunable and
 testable. A probability threshold has a coverage/accuracy curve; a lookup table
@@ -56,20 +57,32 @@ authoritative as a real one.
 ## D3 — Hybrid lexical retrieval before dense embeddings
 
 **Decision.** BM25 (Okapi, on a sklearn count matrix) fused with TF-IDF cosine
-by Reciprocal Rank Fusion, with an intent-derived topic pre-filter. Ranking by
-RRF, thresholding on raw cosine.
+by Reciprocal Rank Fusion. A confident intent contributes a **small topic ranking
+prior**, never a hard candidate filter. Ranking uses RRF + prior; the relevance
+floor still uses raw cosine.
 
-**Reason.** ~100 chunks of policy prose whose discriminating tokens are literal.
-Zero model download, ~2 ms, deterministic, and measured recall@4 = 1.00 with the
-topic filter (0.90 without).
+**Reason.** The corpus is only 107 chunks of policy prose whose discriminating
+tokens are often literal. Lexical retrieval has zero model download, low
+latency, deterministic behaviour, and a strong measured ranking ceiling. On the
+harder 50-query in-scope set, unfiltered Recall@4 is **0.92** and the soft topic
+prior raises it to **0.94**. The actual production path is lower at **0.70**
+because the 0.15 relevance floor intentionally rejects weak evidence.
 
 **Alternative.** sentence-transformers or a hosted embedding API + FAISS/pgvector.
 
 **Trade-off.** Dense retrieval wins on vocabulary mismatch — "money didn't land"
-vs "balance not updated" — which is this retriever's known weak spot.
-`EmbeddingBackend` in `retrieval.py` is the seam: a dense arm is a third rank
-list into the same RRF, not a rewrite. Adding it before measuring would be
-paying latency, cost and an inference dependency for an unquantified gain.
+vs "balance not updated" — which is this retriever's measured weak spot. On 20
+realistic paraphrases, production Recall@4 is **0.60**. `EmbeddingBackend` in
+`retrieval.py` remains the seam: a dense arm can become a third rank list into
+the same RRF, but it should be added only if it improves this measured gap
+without weakening refusal behaviour.
+
+**Why a prior instead of a filter.** The original implementation restricted
+candidates to classifier-derived topics. That looked excellent on a small
+corpus-derived set, but a confidently wrong classifier prediction could remove
+the correct document before ranking even began. A soft prior still rewards an
+intent-consistent document in a near tie while preserving lexical evidence from
+the rest of the corpus.
 
 **Why threshold on cosine, not RRF.** An RRF score is only meaningful relative to
 the other candidates for that query, so a fixed floor on it means nothing.
@@ -78,6 +91,8 @@ every time.
 
 **Easy mistake.** Min-max normalising the two score arrays and averaging. The
 top hit then always scores 1.0, and any relevance floor becomes unreachable.
+A second easy mistake is turning an upstream classifier prediction into a hard
+retrieval constraint without measuring error propagation end to end.
 
 ---
 
@@ -109,7 +124,8 @@ sklearn/numpy/python versions, schema version. `IntentClassifier` refuses to
 load a bundle with the wrong schema version or a missing key.
 
 **Reason.** At 3am the only question that matters is "what exactly is running?".
-The artifact answers it, and `/ready` echoes it.
+The artifact answers it, and `/ready` echoes its operational version while CI
+also records the source revision used to rebuild it.
 
 **Alternative.** `joblib.dump(pipeline)` + a README.
 
@@ -126,18 +142,29 @@ separately and letting them drift out of sync. One Pipeline, one file.
 still leaves ≥ 90% coverage. Selected: **0.45**.
 
 **Reason.** Below the threshold nothing breaks — the router searches the whole
-KB instead of a topic slice — so abstaining is cheap and a mild bias toward it
-is safe. Measured effect: 90.6% coverage, 95.5% accuracy on confident traffic
-vs 91.2% overall.
+KB without the intent prior — so abstaining from intent conditioning is cheap
+and a mild bias toward it is safe. Measured effect: 90.6% coverage, 95.5%
+accuracy on confident traffic vs 91.2% overall.
 
-**Alternative.** A fixed 0.5, or per-class thresholds.
+The test-set reliability analysis also reports **ECE = 0.0895** over 10 bins.
+The classifier is generally under-confident: the 0.4–0.5 bin averages ~0.454
+confidence but ~0.621 accuracy. Confidence therefore separates easy from hard
+traffic well enough to route on, but it is not presented as a perfectly
+calibrated probability.
+
+**Alternative.** A fixed 0.5, per-class thresholds, or explicit probability
+calibration (temperature scaling / isotonic / Platt-style calibration).
 
 **Trade-off.** Per-class thresholds would squeeze more out of the rare intents,
-at the cost of 77 numbers to maintain and re-tune on every retrain. Not worth it
-until per-class error analysis says a specific intent is causing real harm.
+at the cost of 77 numbers to maintain and re-tune on every retrain. Explicit
+calibration could make the probability semantics better, but the current router
+needs ranking/separation more than literal probability correctness. Revisit if
+confidence itself becomes customer-visible or cost decisions depend on it.
 
 **Easy mistake.** Tuning the threshold on the test set. It is chosen on
-validation, and `evaluate.py` is the only code that touches test.
+validation, and `evaluate.py` is the only code that touches test. A second
+mistake is reporting one F1 number without uncertainty: CI now reports a
+stratified-bootstrap 95% interval of **0.9024–0.9218** around macro F1 0.9125.
 
 ---
 
@@ -228,7 +255,8 @@ and put the model version in an env var.
 
 ## D11 — SQLite for the prediction log and feedback
 
-**Decision.** stdlib `sqlite3` behind a `FeedbackStore` class, no ORM.
+**Decision.** stdlib `sqlite3` behind a `FeedbackStore` class, no ORM, and one
+Uvicorn worker while SQLite is the live persistence layer.
 
 **Reason.** Zero infrastructure, and the class boundary is what actually
 matters — nothing outside that file knows the backend.
@@ -267,13 +295,14 @@ That is unbounded cardinality and it will take down the metrics backend.
 
 ## D13 — Container Apps, not Kubernetes
 
-**Decision.** Azure Container Apps for the MVP; Kubernetes manifests provided as
-reference only.
+**Decision.** Azure Container Apps for the reference cloud architecture;
+Kubernetes manifests are provided as reference only. The current public demo is
+Railway + Streamlit Community Cloud.
 
-**Reason.** One stateless HTTP service. Container Apps gives revisions, traffic
-splitting, autoscaling and managed TLS with no cluster to operate.
+**Reason.** One stateless HTTP service. A managed container platform gives
+revisions, autoscaling and managed TLS with no cluster to operate.
 
-**Alternative.** AKS.
+**Alternative.** AKS/Kubernetes.
 
 **Trade-off.** Less control (no custom schedulers, no mesh, no GPU pools) and
 platform lock-in. Adopt Kubernetes when there is a second and third service, or
@@ -282,26 +311,68 @@ probe-shaped for that day.
 
 ---
 
-## D14 — CI and CD are separate workflows
+## D14 — CI proves correctness; deployment remains a separate concern
 
-**Decision.** `ci.yml` proves correctness on every push and PR and never
-deploys. `cd.yml` runs on main, pushes a SHA-tagged image, deploys to staging,
-smoke tests it, then canaries production behind a required approval.
+**Decision.** `ci.yml` proves correctness on every push and PR and never needs
+production credentials. The current Railway integration deploys the merged
+`main` revision separately; the repository's deployment references illustrate a
+more formal staged/canary path for a larger environment.
 
-**Reason.** Different triggers, different permissions, different blast radius.
-A PR from a fork must be able to run tests and must never be able to deploy.
+**Reason.** Testing and deploying have different triggers, permissions and blast
+radii. A PR must be able to run every correctness check without being able to
+ship itself to production.
 
-**Alternative.** One workflow with `if:` conditions.
+**Security scans.** `pip-audit --strict` and gitleaks are blocking gates. The
+container Trivy scan keeps HIGH/CRITICAL findings visible as a SARIF artifact
+for triage, but does not hide pip's vendored SBOM to manufacture a green scan.
+Base-image findings are handled by updating/pinning the base rather than deleting
+scanner evidence.
 
-**Trade-off.** Some duplicated setup steps. Worth it for the permission
-boundary — `cd.yml` is the only workflow with `id-token: write`.
+**Two things CI does that are easy to skip.** It rebuilds model/index artifacts
+from source, so the training pipeline itself is tested on every commit rather
+than only code that loads a stale pickle. And it boots the built image and runs
+the smoke test against it, so "the image starts and answers" is verified before
+a change is merged.
 
-**Two things CI does that are easy to skip.** It rebuilds the model artifacts
-from source data, so the *training pipeline itself* is tested on every commit
-rather than only the code that loads a stale pickle. And it boots the built
-image and runs the smoke test against it, so "the image starts and answers" is
-verified before anything is pushed.
+**Easy mistake.** Running ML quality-gate tests against stale checked-in JSON
+reports. CI deliberately generates `evaluate.py` and `eval_retrieval.py` reports
+first, then runs the `quality_gate` pytest marker against those fresh outputs.
 
-**Rollback.** Immutable SHA tags and a warm previous revision make rollback a
-traffic-weight change, seconds not a CI cycle. `latest` is never deployed:
-it makes "what is running?" unanswerable.
+---
+
+## D15 — Retrieval evaluation must measure error propagation, not just retrieval in isolation
+
+**Decision.** Keep three views of retrieval quality: (1) lexical ranking ceiling
+with no floor or classifier conditioning, (2) classifier-derived soft topic
+prior with no floor, and (3) the actual production path with the relevance
+floor. Evaluate all three on seed questions, realistic paraphrases and a larger
+out-of-scope set. Sweep the floor rather than reporting a single cherry-picked
+number.
+
+**Reason.** The old 34-query evaluation reported Recall@4 = 1.00 with a hard
+intent-topic filter. That result was locally true and architecturally
+misleading. On the harder 70-query benchmark, the useful picture is:
+
+- unfiltered lexical Recall@4: **0.92**
+- soft-prior Recall@4 before the floor: **0.94**
+- production Recall@4 at floor 0.15: **0.70**
+- production paraphrase Recall@4: **0.60**
+- out-of-scope refusal: **0.90 (18/20)**
+
+The prior itself no longer hurts recall; the dominant loss now comes from the
+relevance floor and lexical vocabulary mismatch. That is a much more actionable
+finding than a perfect score on an easy set.
+
+**Alternative.** Report only retriever Recall@k, or only end-to-end answer
+accuracy.
+
+**Trade-off.** Isolated retrieval metrics are easier to compare across models;
+end-to-end metrics are closer to product quality. Measuring both the ceiling and
+the production path explains *where* the loss enters. The benchmark is still
+hand-curated, so the next step is to replace or supplement it with sampled real
+queries and human relevance labels.
+
+**Easy mistake.** Treating a classifier as an oracle inside a RAG pipeline. A
+77-class classifier at 91% accuracy is good, but any hard downstream filter can
+turn its remaining errors into guaranteed retrieval misses. Soft priors degrade
+gracefully; hard filters compound upstream mistakes.
