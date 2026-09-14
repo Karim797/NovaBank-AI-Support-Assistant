@@ -1,0 +1,138 @@
+# CD = "ship the commit CI already blessed." Separate file, separate triggers,
+# separate permissions. Runs only on main (or a manual dispatch), pushes an
+# immutable image tagged with the commit SHA, deploys to staging, smoke tests
+# staging, and only then promotes to production behind a required approval.
+#
+# NOTE: this workflow is deployment configuration. It has not been executed in
+# this reference implementation - it requires an Azure subscription, a
+# container registry and configured GitHub environments.
+name: cd
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      rollback_tag:
+        description: "Existing image tag to roll production back to"
+        required: false
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}      # e.g. novabankacr.azurecr.io
+  IMAGE: novabank-assistant
+
+permissions:
+  contents: read
+  id-token: write        # OIDC federation - no long-lived cloud credentials
+
+jobs:
+  build-and-push:
+    if: github.event.inputs.rollback_tag == ''
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements-dev.txt
+      - name: Build artifacts and re-run the quality gate
+        run: |
+          python -m training.prepare_data
+          python -m training.train_intent
+          python -m training.build_index
+          python -m training.evaluate
+          pytest -q -m quality_gate
+      - id: meta
+        # Immutable, traceable tag. `latest` is never deployed: it makes
+        # "which build is running?" unanswerable and rollback guesswork.
+        run: echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Build and push to ACR
+        run: |
+          az acr login --name ${{ secrets.ACR_NAME }}
+          docker build -t $REGISTRY/$IMAGE:${{ steps.meta.outputs.tag }} .
+          docker tag $REGISTRY/$IMAGE:${{ steps.meta.outputs.tag }} $REGISTRY/$IMAGE:main
+          docker push $REGISTRY/$IMAGE:${{ steps.meta.outputs.tag }}
+          docker push $REGISTRY/$IMAGE:main
+
+  deploy-staging:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Update the staging container app
+        run: |
+          az containerapp update \
+            --name novabank-assistant-staging \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --image $REGISTRY/$IMAGE:${{ needs.build-and-push.outputs.image_tag }}
+      - name: Smoke test staging
+        env:
+          API_KEY: ${{ secrets.STAGING_API_KEY }}
+        run: bash scripts/smoke_test.sh ${{ secrets.STAGING_BASE_URL }}
+
+  deploy-production:
+    needs: [build-and-push, deploy-staging]
+    runs-on: ubuntu-latest
+    environment: production        # required reviewers configured in GitHub
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Canary 20% of traffic to the new revision
+        run: |
+          az containerapp update \
+            --name novabank-assistant \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --image $REGISTRY/$IMAGE:${{ needs.build-and-push.outputs.image_tag }} \
+            --revision-suffix ${{ needs.build-and-push.outputs.image_tag }}
+          az containerapp ingress traffic set \
+            --name novabank-assistant \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --revision-weight latest=20
+      - name: Smoke test production
+        env:
+          API_KEY: ${{ secrets.PROD_API_KEY }}
+        run: bash scripts/smoke_test.sh ${{ secrets.PROD_BASE_URL }}
+      - name: Shift 100% of traffic
+        run: |
+          az containerapp ingress traffic set \
+            --name novabank-assistant \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --revision-weight latest=100
+
+  rollback:
+    # Manual, one command, no rebuild: point traffic back at a revision that is
+    # still running. Mean time to recovery is seconds, not a CI cycle.
+    if: github.event.inputs.rollback_tag != ''
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - run: |
+          az containerapp ingress traffic set \
+            --name novabank-assistant \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --revision-weight ${{ github.event.inputs.rollback_tag }}=100

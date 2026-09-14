@@ -1,0 +1,123 @@
+# CI = "is this commit correct?" It never deploys anything.
+# Runs on every push and PR. Fast lane first (lint), then tests, then the ML
+# quality gate, then a Docker build that must actually boot and answer.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install ruff==0.8.4
+      - run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+
+      # Artifacts are not in git (they are build outputs, and a 23 MB binary in
+      # git history is a maintenance tax). CI rebuilds them from source data, so
+      # the pipeline itself is tested on every commit.
+      - name: Build artifacts
+        run: |
+          python -m training.prepare_data
+          python -m training.train_intent
+          python -m training.build_index
+
+      - name: Unit and integration tests
+        run: pytest -q --cov=src/app --cov-report=term-missing
+
+      # --- the gate that can block a release ---------------------------------
+      - name: ML quality gate
+        run: |
+          python -m training.evaluate
+          python -m training.eval_retrieval
+          pytest -q -m quality_gate
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports
+          path: reports/
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-artifacts
+          path: models/*.joblib
+          retention-days: 14
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Dependency vulnerability scan
+        run: |
+          pip install pip-audit==2.7.3
+          pip-audit -r requirements.txt --strict
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install -r requirements-dev.txt
+      - name: Rebuild artifacts for the image
+        run: |
+          python -m training.prepare_data
+          python -m training.train_intent
+          python -m training.build_index
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: novabank-assistant:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Image vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: novabank-assistant:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: Boot the container and smoke test it
+        run: |
+          docker run -d --name api -p 8000:8000 novabank-assistant:${{ github.sha }}
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:8000/ready && break || sleep 2
+          done
+          bash scripts/smoke_test.sh http://localhost:8000
+          docker logs api | tail -20
+          docker rm -f api
