@@ -23,9 +23,9 @@ def test_safety_intent_uses_deterministic_policy_not_the_llm(classifier, index, 
     assert result.sources
 
 
-def test_confident_intent_uses_topic_filtered_retrieval(router):
+def test_confident_intent_uses_topic_prior_retrieval(router):
     result = router.answer("my card was charged twice for the same purchase")
-    assert result.route is RouteDecision.RAG_TOPIC_FILTERED
+    assert result.route is RouteDecision.RAG_TOPIC_PRIOR
     assert result.intent_is_confident
     assert result.sources
 
@@ -75,7 +75,7 @@ def test_fenced_json_is_recovered(classifier, index, settings):
          '"cited": ["duplicate-and-unrecognised-charges#charged-twice-for-the-same-purchase"]}\n```']
     )
     result = build(classifier, index, settings, llm).answer("charged twice for one purchase")
-    assert result.route is RouteDecision.RAG_TOPIC_FILTERED
+    assert result.route is RouteDecision.RAG_TOPIC_PRIOR
     assert llm.calls == 1
 
 

@@ -13,8 +13,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY requirements.txt .
 RUN pip install --upgrade pip "setuptools>=78.1.1" && \
     pip install -r requirements.txt && \
-    pip install --upgrade "msgpack>=1.2.1" && \
-    rm -f /opt/venv/lib/python3.12/site-packages/pip/_vendor/bom.cdx.json
+    pip install --upgrade "msgpack>=1.2.1"
 
 FROM python:3.12-slim AS runtime
 
@@ -24,16 +23,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="/app/src" \
     PORT=8000
 
-# Keep the runtime image patched. The upstream Python image also ships an
-# embedded pip vendor SBOM whose pinned package versions can become stale and
-# produce false-positive Trivy findings, so remove that metadata file after
-# upgrading the actual runtime packaging libraries.
-RUN apt-get update && \
-    apt-get upgrade -y && \
-    /usr/local/bin/python -m pip install --no-cache-dir --upgrade \
+# Keep scanner evidence intact: do not delete pip's vendored SBOM to make an
+# image scan pass. Application dependencies remain blocking via pip-audit; base
+# image findings are emitted by Trivy in CI for explicit triage.
+RUN /usr/local/bin/python -m pip install --no-cache-dir --upgrade \
       "setuptools>=78.1.1" "msgpack>=1.2.1" && \
-    rm -f /usr/local/lib/python3.12/site-packages/pip/_vendor/bom.cdx.json && \
-    rm -rf /var/lib/apt/lists/* && \
     useradd --create-home --uid 10001 appuser
 
 WORKDIR /app

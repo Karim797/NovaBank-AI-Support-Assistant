@@ -43,17 +43,24 @@ def test_scores_are_ordered_and_bounded(index):
     assert [h.rank for h in hits] == sorted(h.rank for h in hits)
 
 
-def test_topic_filter_restricts_the_candidate_set(index):
-    hits = index.search("what does it cost", top_k=5, topics=["fees"])
-    assert hits and all(h.chunk.topic == "fees" for h in hits)
+def test_wrong_topic_prior_does_not_exclude_the_correct_document(index):
+    """This is the regression the old hard filter could not satisfy."""
+    hits = index.search(
+        "charged twice for the same purchase",
+        top_k=4,
+        topics=["fees"],
+    )
+    assert any(h.chunk.doc_id == "duplicate-and-unrecognised-charges" for h in hits)
 
 
 def test_relevance_floor_rejects_off_topic_questions(index):
     assert index.search("what is the capital of France", top_k=4, min_score=0.15) == []
 
 
-def test_unknown_topic_falls_back_to_the_whole_corpus(index):
-    assert index.search("atm fee", top_k=3, topics=["not-a-topic"])
+def test_unknown_topic_is_just_a_noop_prior(index):
+    plain = index.search("atm fee", top_k=3)
+    unknown = index.search("atm fee", top_k=3, topics=["not-a-topic"])
+    assert [h.chunk.chunk_id for h in unknown] == [h.chunk.chunk_id for h in plain]
 
 
 def test_query_with_no_shared_vocabulary_returns_nothing(index):

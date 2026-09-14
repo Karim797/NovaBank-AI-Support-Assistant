@@ -20,7 +20,8 @@ class RouteDecision(StrEnum):
     """Why the answer looks the way it does. Logged, returned, and asserted in tests."""
 
     DETERMINISTIC_POLICY = "deterministic_policy"      # fixed compliance-approved text
-    RAG_TOPIC_FILTERED = "rag_topic_filtered"          # confident intent -> filtered retrieval
+    RAG_TOPIC_PRIOR = "rag_topic_prior"                # confident intent -> soft topic prior
+    RAG_TOPIC_FILTERED = "rag_topic_filtered"          # legacy value; retained for compatibility
     RAG_UNFILTERED = "rag_unfiltered"                  # low confidence -> whole-KB retrieval
     NO_RELEVANT_CONTEXT = "no_relevant_context"        # retrieval below score floor -> refuse
     UNGROUNDED_ANSWER = "ungrounded_answer"            # LLM cited nothing valid -> refuse

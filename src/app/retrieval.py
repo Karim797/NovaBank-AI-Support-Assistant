@@ -3,7 +3,7 @@
 Decision -> Reason -> Alternative -> Trade-off
 - Decision: hybrid lexical retrieval — BM25 (Okapi, implemented on a sklearn
   count matrix) fused with TF-IDF cosine via Reciprocal Rank Fusion — plus an
-  optional topic pre-filter driven by the intent classifier.
+  optional intent-derived topic **prior**.
 - Reason: this corpus is ~100 chunks of jargon-dense policy text where the
   discriminating tokens are literal ("chargeback", "SEPA", "disposable",
   "GBP 200"). Lexical retrieval nails exact terminology, has zero model-download
@@ -15,15 +15,15 @@ Decision -> Reason -> Alternative -> Trade-off
   plus a vector store (FAISS, pgvector, Chroma).
 - Trade-off: dense retrieval wins on paraphrase and synonym gaps — "money didn't
   land" vs "balance not updated" — which is precisely where this retriever is
-  weakest. That is why `EmbeddingBackend` below is a real seam: adding a dense
-  arm is a third rank list into the same RRF, not a rewrite. The honest position
-  for an MVP is: ship the cheap retriever, measure recall@k on a labelled query
-  set (`training/eval_retrieval.py`), and only pay for embeddings once the
-  measurement says lexical is the bottleneck.
+  weakest. The topic signal is deliberately a soft ranking bonus, not a hard
+  candidate filter: a confidently wrong classifier prediction may reorder the
+  candidates, but it cannot make the correct document impossible to retrieve.
+  `EmbeddingBackend` below remains a real seam for a future dense arm.
 
-Thresholding note: we rank by fused RRF but threshold on raw TF-IDF cosine,
-because cosine is on a stable, interpretable 0-1 scale across queries whereas an
-RRF score only means something relative to the other candidates in that query.
+Thresholding note: we rank by fused RRF plus the small topic prior but threshold
+on raw TF-IDF cosine, because cosine is on a stable, interpretable 0-1 scale
+across queries whereas an RRF score only means something relative to the other
+candidates in that query.
 """
 
 from __future__ import annotations
@@ -41,6 +41,9 @@ from app.kb import Chunk
 RRF_K = 60  # standard Reciprocal Rank Fusion constant
 BM25_K1 = 1.5
 BM25_B = 0.75
+# About 15% of one top-ranked RRF arm. Enough to prefer an intent-consistent
+# passage in a near tie, too small to swamp strong lexical evidence.
+TOPIC_PRIOR_BOOST = 0.0025
 
 
 class EmbeddingBackend(Protocol):
@@ -53,7 +56,7 @@ class EmbeddingBackend(Protocol):
 class RetrievedChunk:
     chunk: Chunk
     score: float          # TF-IDF cosine, used for the relevance floor
-    fused_score: float    # RRF, used for ordering
+    fused_score: float    # RRF + optional topic prior, used for ordering
     rank: int
 
 
@@ -72,12 +75,6 @@ class HybridRetriever:
         self.count = CountVectorizer(ngram_range=(1, 1), stop_words="english", min_df=1)
         counts = self.count.fit_transform(corpus).tocsc().astype(np.float32)
         self._bm25_matrix, self._bm25_idf = self._precompute_bm25(counts)
-
-        self.topics = sorted({c.topic for c in chunks})
-        self._topic_rows: dict[str, np.ndarray] = {
-            t: np.array([i for i, c in enumerate(chunks) if c.topic == t], dtype=int)
-            for t in self.topics
-        }
 
     # ---- BM25 -------------------------------------------------------------
     @staticmethod
@@ -110,23 +107,25 @@ class HybridRetriever:
         return np.asarray(self.tfidf_matrix.dot(q.T).todense()).ravel()
 
     # ---- search -----------------------------------------------------------
-    def _candidate_rows(self, topics: list[str] | None) -> np.ndarray:
-        if not topics:
-            return np.arange(len(self.chunks))
-        rows = [self._topic_rows[t] for t in topics if t in self._topic_rows]
-        if not rows:
-            return np.arange(len(self.chunks))
-        return np.unique(np.concatenate(rows))
-
     def search(
-        self, query: str, top_k: int = 4, topics: list[str] | None = None
+        self,
+        query: str,
+        top_k: int = 4,
+        topics: list[str] | None = None,
+        topic_boost: float = TOPIC_PRIOR_BOOST,
     ) -> list[RetrievedChunk]:
-        rows = self._candidate_rows(topics)
+        """Search the whole corpus, optionally nudging intent-consistent topics.
+
+        `topics` is a prior, never a filter. That distinction is deliberate: if
+        the classifier is confidently wrong, the correct document still remains
+        eligible to rank in the top-k on lexical evidence alone.
+        """
+        rows = np.arange(len(self.chunks))
         if rows.size == 0:
             return []
 
-        bm25 = self._bm25_scores(query)[rows]
-        cosine = self._cosine_scores(query)[rows]
+        bm25 = self._bm25_scores(query)
+        cosine = self._cosine_scores(query)
 
         # rank positions (0 = best) for each arm, then Reciprocal Rank Fusion
         bm25_rank = np.empty_like(bm25, dtype=int)
@@ -135,6 +134,14 @@ class HybridRetriever:
         cos_rank[np.argsort(-cosine, kind="stable")] = np.arange(rows.size)
         fused = 1.0 / (RRF_K + bm25_rank + 1) + 1.0 / (RRF_K + cos_rank + 1)
 
+        if topics and topic_boost > 0:
+            topic_set = set(topics)
+            fused = fused + np.fromiter(
+                (topic_boost if chunk.topic in topic_set else 0.0 for chunk in self.chunks),
+                dtype=float,
+                count=len(self.chunks),
+            )
+
         order = np.argsort(-fused, kind="stable")[:top_k]
         out: list[RetrievedChunk] = []
         for rank, idx in enumerate(order):
@@ -142,7 +149,7 @@ class HybridRetriever:
                 continue  # no lexical overlap at all: never surface it
             out.append(
                 RetrievedChunk(
-                    chunk=self.chunks[rows[idx]],
+                    chunk=self.chunks[idx],
                     score=round(float(cosine[idx]), 4),
                     fused_score=round(float(fused[idx]), 6),
                     rank=rank,
@@ -174,8 +181,11 @@ class KnowledgeIndex:
         top_k: int = 4,
         topics: list[str] | None = None,
         min_score: float = 0.0,
+        topic_boost: float = TOPIC_PRIOR_BOOST,
     ) -> list[RetrievedChunk]:
-        hits = self.retriever.search(query, top_k=top_k, topics=topics)
+        hits = self.retriever.search(
+            query, top_k=top_k, topics=topics, topic_boost=topic_boost
+        )
         return [h for h in hits if h.score >= min_score]
 
 

@@ -19,6 +19,7 @@ Two things here are load-bearing and are the usual interview questions:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 import uuid
@@ -48,6 +49,7 @@ from app.schemas import (
 
 logger = logging.getLogger(__name__)
 limiter = RateLimiter(settings.rate_limit_per_minute)
+_RATE_LIMITED_PATHS = {"/chat", "/chat/batch", "/feedback"}
 
 
 def _load_state(app: FastAPI) -> None:
@@ -130,6 +132,31 @@ app = FastAPI(
 )
 
 
+def _rate_limit_client(request: Request) -> str:
+    """Return a best-effort client bucket without storing a visitor identifier.
+
+    Streamlit calls the API server-side, so Railway cannot see the browser IP.
+    The UI therefore sends a random session-scoped `x-client-id`; hash it before
+    using it as an in-memory bucket key. Direct callers fall back to the first
+    forwarded address supplied by the platform, then to the socket peer.
+
+    This is fairness/rate protection for a public demo, not DDoS protection. A
+    production gateway should enforce authenticated quotas at the edge.
+    """
+    client_id = request.headers.get("x-client-id", "").strip()
+    if client_id and len(client_id) <= 128:
+        digest = hashlib.sha256(client_id.encode("utf-8")).hexdigest()[:24]
+        return f"session:{digest}"
+
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        first = forwarded.split(",", 1)[0].strip()
+        if first:
+            return f"ip:{first}"
+
+    return f"peer:{request.client.host if request.client else '-'}"
+
+
 # ----------------------------------------------------------------- middleware
 @app.middleware("http")
 async def request_context(request: Request, call_next):
@@ -138,14 +165,15 @@ async def request_context(request: Request, call_next):
     request.state.request_id = request_id
     started = time.perf_counter()
 
-    client = request.headers.get("x-api-key") or (request.client.host if request.client else "-")
-    if request.url.path in {"/chat", "/chat/batch"} and not limiter.allow(client, time.time()):
-        metrics.observe_request(request.url.path, 429, 0.0)
-        return JSONResponse(
-            status_code=429,
-            content={"detail": "rate limit exceeded", "request_id": request_id},
-            headers={"x-request-id": request_id, "retry-after": "60"},
-        )
+    if request.url.path in _RATE_LIMITED_PATHS:
+        client = _rate_limit_client(request)
+        if not limiter.allow(client, time.time()):
+            metrics.observe_request(request.url.path, 429, 0.0)
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "rate limit exceeded", "request_id": request_id},
+                headers={"x-request-id": request_id, "retry-after": "60"},
+            )
 
     try:
         response = await call_next(request)
