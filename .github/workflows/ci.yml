@@ -11,6 +11,9 @@ on:
 
 env:
   PYTHON_VERSION: "3.12"
+  # On PRs github.sha is a temporary merge commit. Persist the source revision
+  # instead so model provenance points at code that actually exists in history.
+  SOURCE_GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   lint:
@@ -67,7 +70,12 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
+      # Gitleaks compares the PR commit range. A shallow depth=1 checkout does
+      # not contain the first changed commit's parent and makes the scanner fail
+      # before it scans anything.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
