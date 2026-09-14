@@ -11,7 +11,7 @@ Run locally:
 
 Deployment:
     The production API defaults to the Railway service below. Override API_URL
-    and API_KEY with environment variables / Streamlit Community Cloud secrets.
+    and API_KEY with environment variables or Streamlit Community Cloud secrets.
 """
 
 from __future__ import annotations
@@ -22,8 +22,21 @@ import httpx
 import streamlit as st
 
 DEFAULT_API_URL = "https://novabank-ai-support-assistant-production.up.railway.app"
-API_URL = os.getenv("API_URL", DEFAULT_API_URL).rstrip("/")
-API_KEY = os.getenv("API_KEY", "")
+
+
+def _setting(name: str, default: str = "") -> str:
+    """Read local env vars first, then Streamlit Community Cloud secrets."""
+    value = os.getenv(name)
+    if value:
+        return value
+    try:
+        return str(st.secrets.get(name, default))
+    except Exception:  # no local secrets file is perfectly valid
+        return default
+
+
+API_URL = _setting("API_URL", DEFAULT_API_URL).rstrip("/")
+API_KEY = _setting("API_KEY", "")
 HEADERS = {"x-api-key": API_KEY} if API_KEY else {}
 
 ROUTE_HELP = {
