@@ -23,7 +23,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="/app/src" \
     PORT=8000
 
-RUN useradd --create-home --uid 10001 appuser
+# The upstream Python image can contain globally installed packaging helpers.
+# Upgrade the libraries covered by the current HIGH findings in the final image
+# itself so the runtime filesystem contains only fixed versions.
+RUN /usr/local/bin/python -m pip install --no-cache-dir --upgrade \
+      "setuptools>=78.1.1" "msgpack>=1.2.1" && \
+    useradd --create-home --uid 10001 appuser
 
 WORKDIR /app
 
