@@ -19,8 +19,9 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY requirements.txt .
-RUN pip install --upgrade pip "setuptools>=78.1.1" "msgpack>=1.2.1" && \
-    pip install -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt && \
+    pip install --upgrade "setuptools>=78.1.1" "msgpack>=1.2.1"
 
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim AS runtime
