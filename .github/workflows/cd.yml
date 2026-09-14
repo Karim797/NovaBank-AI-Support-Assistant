@@ -9,8 +9,7 @@
 name: cd
 
 on:
-  push:
-    branches: [main]
+  # Deployment is manual until Azure OIDC, ACR and environment secrets are configured.
   workflow_dispatch:
     inputs:
       rollback_tag:
