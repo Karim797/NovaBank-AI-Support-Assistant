@@ -221,7 +221,7 @@ def main() -> int:
             )
             mlflow.log_artifact(str(REPORTS / "train_report.json"))
             mlflow.log_artifact(str(REPORTS / "data_audit.json"))
-            mlflow.sklearn.log_model(production_pipe, name="pipeline")
+            mlflow.sklearn.log_model(production_pipe, artifact_path="pipeline")
 
     print(json.dumps({**val_metrics, "chosen_threshold": threshold}, indent=2))
     print(f"artifact -> {MODELS / ARTIFACT_NAME}")
