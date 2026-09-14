@@ -68,11 +68,12 @@ TARGET_COVERAGE = 0.90  # keep >=90% of traffic on the confident path
 def git_sha() -> str:
     """Capture source revision in CI and normal git checkouts.
 
-    GitHub Actions exposes the full revision explicitly. Falling back to git
-    keeps local training reproducible too; `unknown` is reserved for exported
-    source trees that genuinely have no revision information.
+    CI sets SOURCE_GIT_SHA to the PR head (rather than GitHub's temporary merge
+    revision). Falling back to GITHUB_SHA and then git keeps other environments
+    reproducible; `unknown` is reserved for exported source trees with no
+    revision information.
     """
-    if sha := os.getenv("GITHUB_SHA"):
+    if sha := os.getenv("SOURCE_GIT_SHA") or os.getenv("GITHUB_SHA"):
         return sha[:12]
     try:
         return subprocess.check_output(
