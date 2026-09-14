@@ -22,6 +22,6 @@
   "chunk_chars_min": 152,
   "chunk_chars_max": 1055,
   "chunk_chars_mean": 339.4,
-  "corpus_sha256": "201005c0cd0fa1961feb9f30226b173e572d291f6d4b9c8b0fddcd9fb444c5eb",
-  "built_at": "2026-09-14T07:15:46.892234+00:00"
+  "corpus_sha256": "287e9b163a02439182e2aaa1e0ed9a1669112724d54497a77931c329c6e927e8",
+  "built_at": "2026-09-14T21:37:34.669627+00:00"
 }
