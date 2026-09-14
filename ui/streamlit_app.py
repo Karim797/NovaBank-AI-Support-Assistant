@@ -6,7 +6,12 @@ retrieval, grounding, escalation - happens behind FastAPI. That is what makes
 the UI disposable: replacing it with a web app, a WhatsApp bot or an IVR changes
 nothing behind the API boundary.
 
-Run: streamlit run ui/streamlit_app.py   (API_URL env var, default localhost:8000)
+Run locally:
+    streamlit run ui/streamlit_app.py
+
+Deployment:
+    The production API defaults to the Railway service below. Override API_URL
+    and API_KEY with environment variables / Streamlit Community Cloud secrets.
 """
 
 from __future__ import annotations
@@ -16,7 +21,8 @@ import os
 import httpx
 import streamlit as st
 
-API_URL = os.getenv("API_URL", "http://localhost:8000")
+DEFAULT_API_URL = "https://novabank-ai-support-assistant-production.up.railway.app"
+API_URL = os.getenv("API_URL", DEFAULT_API_URL).rstrip("/")
 API_KEY = os.getenv("API_KEY", "")
 HEADERS = {"x-api-key": API_KEY} if API_KEY else {}
 
@@ -36,11 +42,14 @@ st.caption("NovaBank is a fictional bank. Policies are synthetic and exist to de
 with st.sidebar:
     st.subheader("Service")
     try:
-        ready = httpx.get(f"{API_URL}/ready", timeout=5).json()
+        ready_response = httpx.get(f"{API_URL}/ready", timeout=8)
+        ready_response.raise_for_status()
+        ready = ready_response.json()
         st.success("ready" if ready.get("status") == "ready" else "not ready")
         st.write({k: v for k, v in ready.items() if k != "checks"})
     except Exception as exc:  # noqa: BLE001
         st.error(f"cannot reach API at {API_URL}: {exc}")
+
     st.divider()
     st.subheader("Try")
     for example in [
@@ -60,8 +69,17 @@ if st.button("Ask", type="primary") and question.strip():
     with st.spinner("Thinking..."):
         try:
             r = httpx.post(
-                f"{API_URL}/chat", json={"question": question}, headers=HEADERS, timeout=60
+                f"{API_URL}/chat",
+                json={"question": question},
+                headers=HEADERS,
+                timeout=60,
             )
+            if r.status_code == 401:
+                st.error(
+                    "The Railway API requires an API key. Add API_KEY to this app's "
+                    "Streamlit Community Cloud secrets, using the same API_KEY configured on Railway."
+                )
+                st.stop()
             r.raise_for_status()
             data = r.json()
         except Exception as exc:  # noqa: BLE001
@@ -86,7 +104,10 @@ if "last" in st.session_state:
     if data["sources"]:
         with st.expander(f"Sources ({len(data['sources'])})", expanded=True):
             for s in data["sources"]:
-                st.markdown(f"**{s['title']} — {s['section']}**  \n`{s['chunk_id']}` (score {s['score']})")
+                st.markdown(
+                    f"**{s['title']} — {s['section']}**  \n"
+                    f"`{s['chunk_id']}` (score {s['score']})"
+                )
     else:
         st.info("No sources - the assistant declined to answer from the knowledge base.")
 
@@ -100,11 +121,13 @@ if "last" in st.session_state:
 
     def _send(helpful: bool) -> None:
         try:
-            httpx.post(
+            feedback_response = httpx.post(
                 f"{API_URL}/feedback",
                 json={"request_id": data["request_id"], "helpful": helpful},
+                headers=HEADERS,
                 timeout=10,
             )
+            feedback_response.raise_for_status()
             st.toast("Thanks - recorded.")
         except Exception as exc:  # noqa: BLE001
             st.error(f"feedback failed: {exc}")
